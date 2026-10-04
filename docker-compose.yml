@@ -1,0 +1,40 @@
+# Stack SCI-AGD isolée des autres projets du VPS (dossier /opt/sci-agd)
+services:
+  sci-agd-db:
+    image: postgres:16-alpine
+    container_name: sci-agd-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: immo_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: immo_abidjan
+    volumes:
+      - sci-agd-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U immo_user -d immo_abidjan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sci-agd-api:
+    build: ./backend
+    container_name: sci-agd-api
+    restart: unless-stopped
+    # Exposée uniquement en local : Nginx fait le HTTPS devant
+    ports:
+      - "127.0.0.1:8083:8082"
+    environment:
+      DATABASE_URL: postgresql://immo_user:${DB_PASSWORD}@sci-agd-db:5432/immo_abidjan
+      PORT: 8082
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      JWT_SECRET: ${JWT_SECRET}
+      PUBLIC_URL: ${PUBLIC_URL}
+    depends_on:
+      sci-agd-db:
+        condition: service_healthy
+    volumes:
+      - sci-agd-uploads:/app/public/uploads
+
+volumes:
+  sci-agd-pgdata:
+  sci-agd-uploads:

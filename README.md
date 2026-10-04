@@ -1,68 +1,79 @@
-# ImmoAbidjan — Backend
+# SCI-AGD — API
 
-API REST Spring Boot pour une plateforme immobilière ciblant Abidjan, Côte d'Ivoire. Gère les annonces de biens (vente / location), un blog et les demandes de contact pour un programme résidentiel organisé en trois quartiers (Nord, Centre, Sud).
+API REST du site SCI-AGD (programme immobilier du domaine de Songon Agban, Abidjan) : biens, articles, demandes de contact, contenus des pages et administration.
 
-## Stack technique
+## Stack
 
-| Technologie | Version |
-|---|---|
-| Java | 21 |
-| Spring Boot | 3.5.0 |
-| Spring Data JPA | (géré par Boot) |
-| Spring Security | (géré par Boot) |
-| Spring Validation | (géré par Boot) |
-| PostgreSQL | (géré par Boot) |
-| Lombok | (géré par Boot) |
-| Build | Gradle (wrapper inclus) |
+Node.js 20 · TypeScript · Express · Prisma · PostgreSQL 16 · Docker Compose
 
-## Base de données
+## Structure
 
-**PostgreSQL** — port 5433 par défaut. Le schéma est auto-géré via `ddl-auto=update`. Un `DataSeeder` peuple automatiquement la base au premier démarrage avec 9 biens et 4 articles de blog.
-
-## Prérequis
-
-- Java 21
-- PostgreSQL démarré sur le port 5433
-
-## Installation et lancement
-
-```bash
-# 1. Créer la base de données et l'utilisateur
-psql -U postgres -c "CREATE USER immo_user WITH PASSWORD 'immo_password';"
-psql -U postgres -c "CREATE DATABASE immo_abidjan OWNER immo_user;"
-
-# 2. Lancer l'API (port 8081)
-./gradlew bootRun        # Linux / macOS
-gradlew.bat bootRun      # Windows
+```
+docker-compose.yml   API + base PostgreSQL (dossier /opt/sci-agd sur le VPS)
+.env.example         variables à copier dans .env (jamais commité)
+backend/
+  src/               serveur Express et routes
+  prisma/
+    schema.prisma    modèle de données
+    migrations/      migrations appliquées au démarrage du conteneur
+    seed.ts          jeu de données de démonstration (unique seed)
+    create-admin.ts  création d'un compte admin
 ```
 
-API disponible sur `http://localhost:8081`.
+## Variables d'environnement
+
+| Variable | Rôle |
+|---|---|
+| `DB_PASSWORD` | Mot de passe PostgreSQL |
+| `JWT_SECRET` | Signature des jetons de connexion admin |
+| `CORS_ORIGIN` | Origines autorisées, séparées par des virgules |
+| `PUBLIC_URL` | URL publique de l'API (construction des URL des photos) |
+| `CLOUDINARY_*` | Optionnel : `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` |
+
+## Lancement
+
+### Docker (production)
+
+```bash
+cp .env.example .env   # puis remplir les valeurs
+docker compose up -d --build
+```
+
+L'API écoute sur `127.0.0.1:8083`, nginx assure le HTTPS devant. Les migrations Prisma sont appliquées automatiquement au démarrage. Le seed, lui, n'est jamais lancé automatiquement.
+
+### En local
+
+```bash
+cd backend
+npm install
+# .env avec DATABASE_URL, JWT_SECRET, CORS_ORIGIN, PORT=8082
+npx prisma migrate deploy
+npm run dev
+```
+
+## Données
+
+```bash
+npm run prisma:seed      # charge (ou recharge) les biens et articles de démo
+npm run demo:purge       # supprime uniquement le contenu de démo
+npm run create-admin -- <email> <mot-de-passe> [nom]
+```
+
+Dans le conteneur : `docker exec sci-agd-api npx tsx prisma/seed.ts`.
+
+Le seed crée 24 biens (SOBE 1 livré, SOBE 2 en travaux, SOBE 3 prévu) et 5 articles, tous marqués `demo`. Il ne touche jamais aux vrais biens.
 
 ## Endpoints
 
-Toutes les routes sont publiques (pas d'authentification requise).
+🔒 = jeton admin requis (`Authorization: Bearer <token>`)
 
-### Biens immobiliers (`/api/properties`)
-
-| Méthode | Route | Description |
-|---|---|---|
-| `GET` | `/api/properties` | Liste des biens — filtrable par `type`, `quartier`, `status` |
-| `POST` | `/api/properties` | Créer un bien |
-| `PUT` | `/api/properties/{id}` | Modifier un bien |
-| `DELETE` | `/api/properties/{id}` | Supprimer un bien |
-
-Paramètres de filtre : `type` (`VENTE` / `LOCATION`), `quartier` (`NORD` / `CENTRE` / `SUD`), `status` (`DISPONIBLE` / `RESERVE` / `VENDU`).
-
-### Articles de blog (`/api/articles`)
-
-| Méthode | Route | Description |
-|---|---|---|
-| `GET` | `/api/articles` | Liste des articles |
-| `POST` | `/api/articles` | Créer un article |
-| `PUT` | `/api/articles/{id}` | Modifier un article |
-
-### Contact (`/api/contact`)
-
-| Méthode | Route | Description |
-|---|---|---|
-| `POST` | `/api/contact` | Envoyer une demande de contact |
+| Route | Méthodes |
+|---|---|
+| `/api/properties` | `GET`, `GET /:id`, 🔒 `POST`, 🔒 `PUT /:id`, 🔒 `DELETE /:id` |
+| `/api/articles` | `GET`, `GET /:id`, 🔒 `GET /admin`, 🔒 `POST`, 🔒 `PUT /:id`, 🔒 `DELETE /:id` |
+| `/api/contact` | `POST`, 🔒 `GET`, 🔒 `PATCH /:id`, 🔒 `DELETE /:id` |
+| `/api/auth` | `POST /login`, 🔒 `GET /moi` |
+| `/api/upload` | 🔒 `POST` (champ `photos`, 12 max) |
+| `/api/contenus` | `GET /:cle`, 🔒 `PUT /:cle` |
+| `/api/demo` | `GET` (bandeau démo actif ?), 🔒 `DELETE` (purge de la démo) |
+| `/uploads/*` | photos envoyées |
