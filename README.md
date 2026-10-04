@@ -77,3 +77,15 @@ Le seed crée 24 biens (SOBE 1 livré, SOBE 2 en travaux, SOBE 3 prévu) et 5 ar
 | `/api/contenus` | `GET /:cle`, 🔒 `PUT /:cle` |
 | `/api/demo` | `GET` (bandeau démo actif ?), 🔒 `DELETE` (purge de la démo) |
 | `/uploads/*` | photos envoyées |
+
+## Déploiement continu
+
+À chaque push sur `main`, GitHub Actions ([.github/workflows/ci-deploy.yml](.github/workflows/ci-deploy.yml)) compile l'API puis, si le build passe, se connecte au VPS avec la clé du secret `VPS_SSH_KEY`.
+
+Cette clé ne peut lancer qu'une commande : `/usr/local/bin/sci-agd-deploy` (copie de [deploy/sci-agd-deploy.sh](deploy/sci-agd-deploy.sh)). Le script récupère `main` dans `/opt/sci-agd`, reconstruit uniquement le conteneur de l'API et vérifie qu'elle répond.
+
+Après une modification de `deploy/sci-agd-deploy.sh`, il faut le recopier à la main sur le VPS :
+
+```bash
+scp deploy/sci-agd-deploy.sh ionos:/usr/local/bin/sci-agd-deploy
+```

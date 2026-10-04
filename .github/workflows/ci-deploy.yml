@@ -1,0 +1,52 @@
+# Build de l'API à chaque push et pull request.
+# Sur main, si le build passe : déploiement sur le VPS IONOS.
+# La clé VPS_SSH_KEY n'ouvre aucun shell : sur le VPS, elle ne peut lancer que
+# /usr/local/bin/sci-agd-deploy (copie de deploy/sci-agd-deploy.sh).
+name: CI / Déploiement
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
+
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # Jamais deux déploiements en parallèle
+    concurrency:
+      group: deploy-vps
+      cancel-in-progress: false
+    steps:
+      - name: Déployer sur le VPS
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Empreinte publique du VPS : refuse tout autre serveur
+          echo "217.160.69.180 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILaIKFuDNiJ2JivHefgS4e/MsU7Ka5Hw5CChEna0SW0H" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes -o BatchMode=yes root@217.160.69.180
+
+      - name: Vérifier l'API publique
+        run: curl -fsS https://217-160-69-180.sslip.io/api/demo
